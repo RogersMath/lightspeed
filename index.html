@@ -516,6 +516,86 @@
         const canvas = get('starmapCanvas');
         const ctx = canvas.getContext('2d');
 
+        // Audio System
+        class AudioManager {
+            constructor() {
+                this.audioContext = null;
+                this.masterGain = null;
+                this.initialized = false;
+            }
+
+            init() {
+                if (this.initialized) return;
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.masterGain = this.audioContext.createGain();
+                    this.masterGain.connect(this.audioContext.destination);
+                    this.masterGain.gain.value = 0.3; // Master volume
+                    this.initialized = true;
+                } catch (e) {
+                    console.log('Audio not supported');
+                }
+            }
+
+            playBeep(frequency = 440, duration = 0.1, type = 'sine') {
+                if (!this.initialized) return;
+                
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(this.masterGain);
+                
+                oscillator.frequency.value = frequency;
+                oscillator.type = type;
+                
+                // Envelope for smooth sound
+                const now = this.audioContext.currentTime;
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+                
+                oscillator.start(now);
+                oscillator.stop(now + duration);
+            }
+
+            playSuccess() {
+                // Triumphant chord progression
+                this.playBeep(523, 0.15, 'sine'); // C5
+                setTimeout(() => this.playBeep(659, 0.15, 'sine'), 100); // E5
+                setTimeout(() => this.playBeep(784, 0.3, 'sine'), 200); // G5
+            }
+
+            playError() {
+                // Descending warning tone
+                this.playBeep(300, 0.1, 'sawtooth');
+                setTimeout(() => this.playBeep(250, 0.2, 'sawtooth'), 100);
+            }
+
+            playClick() {
+                // Subtle UI click
+                this.playBeep(800, 0.05, 'square');
+            }
+
+            playAdjust() {
+                // Quick adjustment sound
+                this.playBeep(600, 0.03, 'sine');
+            }
+
+            playMenuSelect() {
+                // Menu selection sound
+                this.playBeep(440, 0.1, 'sine');
+                setTimeout(() => this.playBeep(554, 0.1, 'sine'), 80);
+            }
+
+            playCountdown() {
+                // Time running out warning
+                this.playBeep(880, 0.1, 'triangle');
+            }
+        }
+
+        const audioManager = new AudioManager();
+
         const gameState = {
             score: 0,
             timeLeft: 120,
@@ -538,6 +618,9 @@
         };
 
         function selectMode(mode) {
+            audioManager.init(); // Initialize audio on first user interaction
+            audioManager.playMenuSelect();
+            
             if (mode === 'POLAR_TO_CARTESIAN' || mode === 'POLAR_READING') {
                 gameState.currentMode = mode;
                 get('modeDisplay').textContent = gameModes[mode].name.toUpperCase();
@@ -546,6 +629,7 @@
         }
 
         function showStartScreen() {
+            audioManager.playClick();
             gameState.active = false;
             clearInterval(gameState.interval);
             get('startScreen').style.display = 'flex';
@@ -554,6 +638,7 @@
         }
 
         function restartCurrentMode() {
+            audioManager.playClick();
             startGame();
         }
 
@@ -788,6 +873,8 @@
         }
 
         function adjustValue(inputId, direction) {
+            audioManager.playAdjust();
+            
             const input = get(inputId);
             const index = inputId === 'input1' ? 0 : 1;
             const [min, max] = gameState.problem.ranges[index];
@@ -820,6 +907,8 @@
         }
 
         function checkAnswer() {
+            audioManager.playClick();
+            
             const guess1 = parseFloat(get('input1').value);
             const guess2 = parseFloat(get('input2').value);
 
@@ -840,6 +929,7 @@
             
             if (val1Correct && val2Correct) {
                 // Correct! Celebrate and move on
+                audioManager.playSuccess();
                 gameState.score += 100;
                 gameState.lastGuess = null;
                 showFeedback("JUMP SUCCESSFUL", "correct");
@@ -852,6 +942,7 @@
                 
             } else {
                 // Show feedback about what's wrong
+                audioManager.playError();
                 let feedbackText = "";
                 if (gameState.currentMode === 'POLAR_READING') {
                     if (!val1Correct && !val2Correct) {
@@ -914,6 +1005,11 @@
                 const minutes = Math.floor(gameState.timeLeft / 60);
                 const seconds = gameState.timeLeft % 60;
                 get('timeDisplay').textContent = `TIME: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Warning sounds for last 10 seconds
+                if (gameState.timeLeft <= 10 && gameState.timeLeft > 0) {
+                    audioManager.playCountdown();
+                }
                 
                 if (gameState.timeLeft <= 0) {
                     endGame();
